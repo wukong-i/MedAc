@@ -5,7 +5,7 @@ export async function onRequest({ request, next }) {
   if (url.pathname.includes('/data/')) {
     const referer = request.headers.get('referer');
     if (!referer || !referer.includes(url.hostname)) {
-      return new Response('Unauthorized', { status: 403 });
+      return new Response('Go Fuck Your MOM , DogShit!', { status: 403 });
     }
   }
   
