@@ -14,7 +14,7 @@ export async function onRequest(context) {
     return new Response(object.body, {
       headers: {
         "content-type": "application/json",
-        "cache-control": "public, max-age=3600"
+        "cache-control": "public, max-age=315360000, immutable"
       }
     });
   } catch (err) {
