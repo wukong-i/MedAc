@@ -2094,14 +2094,14 @@
             try {
                 // Try to get list of JSON files from a directory listing API or predefined list
                 // Since we can't directly list directory contents from browser, we'll try common files
-            const commonFiles = ['Marrow Ed8.json','Marrow PYQ.json','Cerebellum BTR.json', 'Cerebellum Combined.json','Cerebellum QB.json','Cerebellum PYQ.json','Dams Combined.json','Dams GT.json','Dams PYQ.json', 'Dams QB.json', 'Egurukul QB.json', 'Egurukul PYQ.json', 'Prep Combined.json', 'PrepX QB.json', 'PrepX RR QB.json', 'Prep PYQ.json'];
+            const commonFiles = ['MarrowEd8.json','MarrowPYQ.json','CerebellumBTR.json', 'CerebellumCombined.json','CerebellumQB.json','CerebellumPYQ.json','DamsCombined.json','DamsGT.json','DamsPYQ.json', 'DamsQB.json', 'EgurukulQB.json', 'EgurukulPYQ.json', 'PrepCombined.json', 'PrepXQB.json', 'PrepXRRQB.json', 'PrepPYQ.json'];
                 
                 availableSubjects = [];
                 
                 for (const file of commonFiles) {
                     try {
-                        const encoded = encodeURIComponent(file);
-                        const response = await fetch(`/functions/json/${encoded}`);
+
+                        const response = await fetch("/data/"+encodeURIComponent(file));
                         if (response.ok) {
                             const data = await response.json();
                             availableSubjects.push({
@@ -2161,7 +2161,7 @@
                 console.log('Loading subject:', filename);
                 
                 const encoded = encodeURIComponent(filename);
-                const response = await fetch(`/data/${encoded}`);
+                const response = await fetch(`jsons/${encoded}`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
