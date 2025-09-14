@@ -1,0 +1,6 @@
+name = "medac"
+compatibility_date = "2023-09-14"
+
+[[r2_buckets]]
+binding = "QUIZ_BUCKET"
+bucket_name = "quiz-jsons"
