@@ -2182,8 +2182,8 @@
                 combined.set(iv);
                 combined.set(new Uint8Array(encryptedBuffer), iv.length);
                 
-                // Convert to base64 for storage
-                return btoa(String.fromCharCode(...combined));
+                // Convert to base64 for storage (chunk-based to avoid stack overflow)
+                return arrayBufferToBase64(combined);
             } catch (error) {
                 console.error('Encryption failed:', error);
                 throw error;
@@ -2194,10 +2194,8 @@
             try {
                 const key = await getEncryptionKey();
                 
-                // Convert from base64
-                const combined = new Uint8Array(
-                    atob(encryptedData).split('').map(char => char.charCodeAt(0))
-                );
+                // Convert from base64 (chunk-based to avoid stack overflow)
+                const combined = base64ToArrayBuffer(encryptedData);
                 
                 // Extract IV and encrypted data
                 const iv = combined.slice(0, 12);
@@ -2220,6 +2218,31 @@
                 console.error('Decryption failed:', error);
                 throw error;
             }
+        }
+        
+        // Utility functions for large file base64 conversion
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const chunkSize = 0x8000; // 32KB chunks to avoid stack overflow
+            
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, i + chunkSize);
+                binary += String.fromCharCode.apply(null, chunk);
+            }
+            
+            return btoa(binary);
+        }
+        
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            
+            return bytes;
         }
         
         // IndexedDB Functions
@@ -2496,7 +2519,7 @@
                             <div style="color: var(--primary); font-size: 1.2rem; margin-bottom: 1rem;">
                                 <i class="fas fa-spinner fa-spin"></i> Loading ${filename}...
                             </div>
-                            <div style="color: var(--text-muted); font-size: 0.9rem;">Downloading and caching for future use...</div>
+                            <div style="color: var(--text-muted); font-size: 0.9rem;">Loading Quiz Data Bruhh...</div>
                         </div>
                         <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
                                     background: rgba(0,0,0,0.5); z-index: 9998;"></div>
