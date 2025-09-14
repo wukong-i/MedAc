@@ -2161,7 +2161,7 @@
                 console.log('Loading subject:', filename);
                 
                 const encoded = encodeURIComponent(filename);
-                const response = await fetch(`jsons/${encoded}`);
+                const response = await fetch("/data/"+filename);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
