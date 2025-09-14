@@ -2047,7 +2047,20 @@
     <script>
         // Global variables
         let availableSubjects = [];
+        let loadedSubjectData = new Map(); // Memory cache for loaded JSON data
         let currentSubjectData = null;
+        let db = null; // IndexedDB instance
+        
+        // IndexedDB Configuration
+        const DB_NAME = 'MedOracleQuizDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'subjectData';
+        const CACHE_EXPIRY_DAYS = 7; // Cache expires after 7 days
+        
+        // Encryption Configuration
+        let encryptionKey = null;
+        const ENCRYPTION_ALGORITHM = 'AES-GCM';
+        const KEY_LENGTH = 256; // AES-256
         let currentSubject = '';
         let currentQuestionIndex = 0;
         let selectedAnswers = {};
@@ -2088,33 +2101,324 @@
                 }
             }
         }
+        
+        // Encryption Functions
+        async function generateEncryptionKey() {
+            try {
+                // Generate a new AES-256 key
+                const key = await crypto.subtle.generateKey(
+                    {
+                        name: ENCRYPTION_ALGORITHM,
+                        length: KEY_LENGTH
+                    },
+                    true, // extractable
+                    ['encrypt', 'decrypt']
+                );
+                
+                // Export and store the key in sessionStorage (cleared on browser close)
+                const exportedKey = await crypto.subtle.exportKey('jwk', key);
+                sessionStorage.setItem('medoracle_encryption_key', JSON.stringify(exportedKey));
+                
+                return key;
+            } catch (error) {
+                console.error('Failed to generate encryption key:', error);
+                throw error;
+            }
+        }
+        
+        async function getEncryptionKey() {
+            if (encryptionKey) {
+                return encryptionKey;
+            }
+            
+            try {
+                // Try to load existing key from sessionStorage
+                const storedKey = sessionStorage.getItem('medoracle_encryption_key');
+                if (storedKey) {
+                    const keyData = JSON.parse(storedKey);
+                    encryptionKey = await crypto.subtle.importKey(
+                        'jwk',
+                        keyData,
+                        {
+                            name: ENCRYPTION_ALGORITHM,
+                            length: KEY_LENGTH
+                        },
+                        true,
+                        ['encrypt', 'decrypt']
+                    );
+                    return encryptionKey;
+                }
+                
+                // Generate new key if none exists
+                encryptionKey = await generateEncryptionKey();
+                return encryptionKey;
+            } catch (error) {
+                console.error('Failed to get encryption key:', error);
+                throw error;
+            }
+        }
+        
+        async function encryptData(data) {
+            try {
+                const key = await getEncryptionKey();
+                const jsonString = JSON.stringify(data);
+                const encoder = new TextEncoder();
+                const dataBuffer = encoder.encode(jsonString);
+                
+                // Generate a random IV for each encryption
+                const iv = crypto.getRandomValues(new Uint8Array(12)); // 96-bit IV for GCM
+                
+                const encryptedBuffer = await crypto.subtle.encrypt(
+                    {
+                        name: ENCRYPTION_ALGORITHM,
+                        iv: iv
+                    },
+                    key,
+                    dataBuffer
+                );
+                
+                // Combine IV and encrypted data
+                const combined = new Uint8Array(iv.length + encryptedBuffer.byteLength);
+                combined.set(iv);
+                combined.set(new Uint8Array(encryptedBuffer), iv.length);
+                
+                // Convert to base64 for storage
+                return btoa(String.fromCharCode(...combined));
+            } catch (error) {
+                console.error('Encryption failed:', error);
+                throw error;
+            }
+        }
+        
+        async function decryptData(encryptedData) {
+            try {
+                const key = await getEncryptionKey();
+                
+                // Convert from base64
+                const combined = new Uint8Array(
+                    atob(encryptedData).split('').map(char => char.charCodeAt(0))
+                );
+                
+                // Extract IV and encrypted data
+                const iv = combined.slice(0, 12);
+                const encryptedBuffer = combined.slice(12);
+                
+                const decryptedBuffer = await crypto.subtle.decrypt(
+                    {
+                        name: ENCRYPTION_ALGORITHM,
+                        iv: iv
+                    },
+                    key,
+                    encryptedBuffer
+                );
+                
+                const decoder = new TextDecoder();
+                const jsonString = decoder.decode(decryptedBuffer);
+                
+                return JSON.parse(jsonString);
+            } catch (error) {
+                console.error('Decryption failed:', error);
+                throw error;
+            }
+        }
+        
+        // IndexedDB Functions
+        function initIndexedDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                
+                request.onerror = () => {
+                    console.error('IndexedDB failed to open');
+                    reject(request.error);
+                };
+                
+                request.onsuccess = () => {
+                    db = request.result;
+                    console.log('IndexedDB initialized successfully');
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    db = event.target.result;
+                    
+                    // Create object store for subject data
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        const store = db.createObjectStore(STORE_NAME, { keyPath: 'filename' });
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                        console.log('IndexedDB object store created');
+                    }
+                };
+            });
+        }
+        
+        // Store encrypted data in IndexedDB
+        async function storeInIndexedDB(filename, data) {
+            return new Promise(async (resolve, reject) => {
+                if (!db) {
+                    reject(new Error('IndexedDB not initialized'));
+                    return;
+                }
+                
+                try {
+                    // Encrypt the data before storing
+                    const encryptedData = await encryptData(data);
+                    
+                    const transaction = db.transaction([STORE_NAME], 'readwrite');
+                    const store = transaction.objectStore(STORE_NAME);
+                    
+                    const dataToStore = {
+                        filename: filename,
+                        data: encryptedData, // Store encrypted data
+                        timestamp: Date.now(),
+                        encrypted: true // Flag to indicate encrypted data
+                    };
+                    
+                    const request = store.put(dataToStore);
+                    
+                    request.onsuccess = () => {
+                        console.log(`Stored encrypted ${filename} in IndexedDB`);
+                        resolve();
+                    };
+                    
+                    request.onerror = () => {
+                        console.error(`Failed to store ${filename} in IndexedDB`);
+                        reject(request.error);
+                    };
+                } catch (error) {
+                    console.error(`Encryption failed for ${filename}:`, error);
+                    reject(error);
+                }
+            });
+        }
+        
+        // Retrieve and decrypt data from IndexedDB
+        function getFromIndexedDB(filename) {
+            return new Promise(async (resolve, reject) => {
+                if (!db) {
+                    reject(new Error('IndexedDB not initialized'));
+                    return;
+                }
+                
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.get(filename);
+                
+                request.onsuccess = async () => {
+                    try {
+                        const result = request.result;
+                        
+                        if (result) {
+                            // Check if cache is still valid (not expired)
+                            const now = Date.now();
+                            const cacheAge = now - result.timestamp;
+                            const maxAge = CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000; // Convert days to milliseconds
+                            
+                            if (cacheAge < maxAge) {
+                                // Decrypt the data if it's encrypted
+                                let decryptedData;
+                                if (result.encrypted) {
+                                    decryptedData = await decryptData(result.data);
+                                    console.log(`Retrieved and decrypted ${filename} from IndexedDB cache`);
+                                } else {
+                                    // Handle legacy unencrypted data
+                                    decryptedData = result.data;
+                                    console.log(`Retrieved ${filename} from IndexedDB cache (legacy unencrypted)`);
+                                }
+                                
+                                resolve(decryptedData);
+                            } else {
+                                console.log(`Cache expired for ${filename}, removing from IndexedDB`);
+                                // Remove expired cache
+                                const deleteTransaction = db.transaction([STORE_NAME], 'readwrite');
+                                const deleteStore = deleteTransaction.objectStore(STORE_NAME);
+                                deleteStore.delete(filename);
+                                resolve(null);
+                            }
+                        } else {
+                            resolve(null);
+                        }
+                    } catch (error) {
+                        console.error(`Failed to decrypt ${filename}:`, error);
+                        // If decryption fails, remove the corrupted entry
+                        const deleteTransaction = db.transaction([STORE_NAME], 'readwrite');
+                        const deleteStore = deleteTransaction.objectStore(STORE_NAME);
+                        deleteStore.delete(filename);
+                        resolve(null);
+                    }
+                };
+                
+                request.onerror = () => {
+                    console.error(`Failed to retrieve ${filename} from IndexedDB`);
+                    reject(request.error);
+                };
+            });
+        }
+        
+        // Clear expired cache entries
+        function clearExpiredCache() {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    resolve();
+                    return;
+                }
+                
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.openCursor();
+                
+                const now = Date.now();
+                const maxAge = CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+                
+                request.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        const cacheAge = now - cursor.value.timestamp;
+                        if (cacheAge >= maxAge) {
+                            console.log(`Removing expired cache: ${cursor.value.filename}`);
+                            cursor.delete();
+                        }
+                        cursor.continue();
+                    } else {
+                        console.log('Expired cache cleanup completed');
+                        resolve();
+                    }
+                };
+                
+                request.onerror = () => {
+                    reject(request.error);
+                };
+            });
+        }
 
-        // Auto-detect JSON files in jsons directory
+        // Load subjects metadata for fast initial loading
         async function loadAvailableSubjects() {
             try {
-                // Try to get list of JSON files from a directory listing API or predefined list
-                // Since we can't directly list directory contents from browser, we'll try common files
-            const commonFiles = ['MarrowEd8.json','MarrowPYQ.json','CerebellumBTR.json', 'CerebellumCombined.json','CerebellumQB.json','CerebellumPYQ.json','DamsCombined.json','DamsGT.json','DamsPYQ.json', 'DamsQB.json', 'EgurukulQB.json', 'EgurukulPYQ.json', 'PrepCombined.json', 'PrepXQB.json', 'PrepXRRQB.json', 'PrepPYQ.json'];
+                // Initialize IndexedDB first
+                await initIndexedDB();
                 
-                availableSubjects = [];
+                // Clear expired cache entries
+                await clearExpiredCache();
                 
-                for (const file of commonFiles) {
-                    try {
-
-                        const response = await fetch("/data/"+file);
-                        if (response.ok) {
-                            const data = await response.json();
-                            availableSubjects.push({
-                                filename: file,
-                                name: data.title || file.replace('.json', '').replace(/[_-]/g, ' '),
-                                description: data.description || '',
-                                stats: data.extraction_info || {},
-                                subjects: data.subjects || {}
-                            });
-                        }
-                    } catch (e) {
-                        // File doesn't exist, skip
+                // Load lightweight metadata file first (12KB vs 500MB+)
+                const response = await fetch('metadata.json');
+                if (response.ok) {
+                    const metadata = await response.json();
+                    
+                    availableSubjects = [];
+                    
+                    // Populate subjects from metadata
+                    for (const [filename, data] of Object.entries(metadata)) {
+                        availableSubjects.push({
+                            filename: filename,
+                            name: data.name,
+                            description: data.description,
+                            stats: data.stats,
+                            file_size: data.file_size,
+                            subjects_count: data.subjects_count
+                        });
                     }
+                } else {
+                    throw new Error('Metadata file not found');
                 }
                 
                 populateSubjectButtons();
@@ -2155,18 +2459,81 @@
             });
         }
 
-        // Select subject and load data
+        // Select subject and load data (with IndexedDB caching)
         async function selectSubject(filename) {
             try {
                 console.log('Loading subject:', filename);
                 
-                const encoded = encodeURIComponent(filename);
-                const response = await fetch("/data/"+filename);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                let data = null;
+                
+                // Check memory cache first (fastest)
+                if (loadedSubjectData.has(filename)) {
+                    console.log(`Using memory cache for ${filename}`);
+                    data = loadedSubjectData.get(filename);
+                } else {
+                    // Check IndexedDB cache (fast)
+                    try {
+                        data = await getFromIndexedDB(filename);
+                        if (data) {
+                            console.log(`Using IndexedDB cache for ${filename}`);
+                            // Store in memory cache for even faster access
+                            loadedSubjectData.set(filename, data);
+                        }
+                    } catch (error) {
+                        console.warn('IndexedDB cache failed, will fetch from network:', error);
+                    }
                 }
                 
-                currentSubjectData = await response.json();
+                // If not in cache, fetch from network
+                if (!data) {
+                    // Show loading indicator
+                    const loadingMsg = document.createElement('div');
+                    loadingMsg.id = 'subjectLoading';
+                    loadingMsg.innerHTML = `
+                        <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                                    background: var(--bg-card); padding: 2rem; border-radius: 1rem; 
+                                    border: 2px solid var(--primary); z-index: 9999; text-align: center;">
+                            <div style="color: var(--primary); font-size: 1.2rem; margin-bottom: 1rem;">
+                                <i class="fas fa-spinner fa-spin"></i> Loading ${filename}...
+                            </div>
+                            <div style="color: var(--text-muted); font-size: 0.9rem;">Downloading and caching for future use...</div>
+                        </div>
+                        <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                                    background: rgba(0,0,0,0.5); z-index: 9998;"></div>
+                    `;
+                    document.body.appendChild(loadingMsg);
+                    
+                    try {
+                        // Fetch from network
+                        const response = await fetch("/data/" + filename);
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        data = await response.json();
+                        
+                        // Cache in memory
+                        loadedSubjectData.set(filename, data);
+                        
+                        // Cache in IndexedDB for persistence
+                        try {
+                            await storeInIndexedDB(filename, data);
+                        } catch (error) {
+                            console.warn('Failed to cache in IndexedDB:', error);
+                        }
+                        
+                        console.log(`Downloaded and cached ${filename}`);
+                        
+                    } finally {
+                        // Remove loading indicator
+                        const loadingMsg = document.getElementById('subjectLoading');
+                        if (loadingMsg) {
+                            document.body.removeChild(loadingMsg);
+                        }
+                    }
+                }
+                
+                currentSubjectData = data;
                 currentSubject = filename;
                 
                 // Show navigation modal
@@ -2176,6 +2543,12 @@
                 populateSubjects();
                 
             } catch (error) {
+                // Remove loading indicator if it exists
+                const loadingMsg = document.getElementById('subjectLoading');
+                if (loadingMsg) {
+                    document.body.removeChild(loadingMsg);
+                }
+                
                 console.error('Error loading subject:', error);
                 alert('Failed to load subject data. Please try again.');
             }
