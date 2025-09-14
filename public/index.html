@@ -2101,7 +2101,7 @@
                 for (const file of commonFiles) {
                     try {
 
-                        const response = await fetch("/data/"+encodeURIComponent(file));
+                        const response = await fetch("/data/"+file);
                         if (response.ok) {
                             const data = await response.json();
                             availableSubjects.push({
