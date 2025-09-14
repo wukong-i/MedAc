@@ -1,3 +1,0 @@
-/data/*.json
-  Cache-Control: public, max-age=315360000, immutable
-  Content-Type: application/json
