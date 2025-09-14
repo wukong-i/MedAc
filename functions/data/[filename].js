@@ -2,7 +2,7 @@ export async function onRequest(context) {
   const { QUIZ_BUCKET } = context.env;
 
   // Decode the filename from the URL (handles spaces, %20, etc.)
-  const file = decodeURIComponent(context.params.filename);
+  const file = context.params.filename;
 
   try {
     const object = await QUIZ_BUCKET.get(file);
