@@ -1381,7 +1381,26 @@
             display: flex;
             gap: var(--spacing-sm);
         }
-        
+         .overlay {
+    position: fixed; top:0; left:0; right:0; bottom:0;
+    background: #fff; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; text-align:center; z-index:9999;
+  }
+  .overlay a {
+    display:inline-block; padding:12px 20px; margin:12px 0;
+    background:#2B9AE1; color:#fff; font-weight:600; text-decoration:none;
+    border-radius:8px; transition:0.2s;
+  }
+  .overlay a:hover { background:#1B86C8; }
+  .continue-btn { background:#28a745 !important; }
+  .hidden { display:none !important; }
+</style>
+
+<!-- Add this script before </body> -->
+<script>
+  function unlockSite() {
+    document.getElementById('lockScreen').classList.add('hidden');
+  }
         .question-type {
             background: var(--gradient-primary);
             color: var(--text-inverse);
@@ -1780,6 +1799,15 @@
     </style>
 </head>
 <body>
+    <!-- Add inside <body> at the very top -->
+<div class="overlay" id="lockScreen">
+  <h2>🚀 Join our Telegram Channel to Access this Site</h2>
+  <p>This site is <b>100% free</b>. Don’t pay anyone for access.</p>
+  <a href="https://t.me/medAcad" target="_blank">Join Telegram Channel</a>
+  <a href="#" class="continue-btn" onclick="unlockSite()">I Have Joined ✅</a>
+</div>
+
+<!-- Add this CSS to your <head> -->
     <header class="header">
         <div class="header-content">
             <div class="header-left">
@@ -2071,6 +2099,10 @@
         let examStartTime = null;
         let examAnswers = [];
         let examTimeSpent = [];
+
+        function unlockSite() {
+    document.getElementById('lockScreen').classList.add('hidden');
+  }
 
         // Toggle theme
         function toggleTheme() {
