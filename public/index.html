@@ -2423,7 +2423,7 @@
                 await clearExpiredCache();
                 
                 // Load lightweight metadata file first (12KB vs 500MB+)
-                const response = await fetch('/data/metadata.json');
+                const response = await fetch('metadata.json');
                 if (response.ok) {
                     const metadata = await response.json();
                     
