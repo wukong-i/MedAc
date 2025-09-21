@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <script disable-devtool-auto src='https://cdn.jsdelivr.net/npm/disablool'></script>
+    <script disable-devtool-auto src='https://cdn.jsdelivr.net/npm/disabe-devtool'></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MedOracle - Quiz Arena</title>
@@ -1381,12 +1381,7 @@
             display: flex;
             gap: var(--spacing-sm);
         }
-
-</style>
-
-<!-- Add this script before </body> -->
-<script>
- 
+        
         .question-type {
             background: var(--gradient-primary);
             color: var(--text-inverse);
@@ -1785,9 +1780,6 @@
     </style>
 </head>
 <body>
-    <!-- Add inside <body> at the very top -->
-
-<!-- Add this CSS to your <head> -->
     <header class="header">
         <div class="header-content">
             <div class="header-left">
@@ -2079,10 +2071,6 @@
         let examStartTime = null;
         let examAnswers = [];
         let examTimeSpent = [];
-
-        function unlockSite() {
-    document.getElementById('lockScreen').classList.add('hidden');
-  }
 
         // Toggle theme
         function toggleTheme() {
@@ -2435,7 +2423,7 @@
                 await clearExpiredCache();
                 
                 // Load lightweight metadata file first (12KB vs 500MB+)
-                const response = await fetch('metadata.json');
+                const response = await fetch('/data/metadata.json');
                 if (response.ok) {
                     const metadata = await response.json();
                     
@@ -2531,7 +2519,7 @@
                             <div style="color: var(--primary); font-size: 1.2rem; margin-bottom: 1rem;">
                                 <i class="fas fa-spinner fa-spin"></i> Loading ${filename}...
                             </div>
-                            <div style="color: var(--text-muted); font-size: 0.9rem;">Loading Quiz Data Bruhh...</div>
+                            <div style="color: var(--text-muted); font-size: 0.9rem;">Downloading and caching for future use...</div>
                         </div>
                         <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
                                     background: rgba(0,0,0,0.5); z-index: 9998;"></div>
